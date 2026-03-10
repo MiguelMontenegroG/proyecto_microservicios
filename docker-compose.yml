@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  database-empleados:
+    image: mongo:${MONGO_VERSION:-7.0}
+    container_name: database-empleados
+    env_file:
+      - .env
+    ports:
+      - "${MONGODB_EMPL_PORT}:27017"
+    volumes:
+      - vol-empleados:/data/db
+    networks:
+      - microservicios-network
+
+  database-departamentos:
+    image: mongo:${MONGO_VERSION:-7.0}
+    container_name: database-departamentos
+    env_file:
+      - .env
+    ports:
+      - "${MONGODB_DEP_PORT}:27017"
+    volumes:
+      - vol-departamentos:/data/db
+    networks:
+      - microservicios-network
+
+  empleados-service:
+    build: ./empleados-service
+    container_name: empleados-service
+    env_file:
+      - .env
+    ports:
+      - "${EMPLEADOS_SERVICE_PORT}:${EMPLEADOS_SERVICE_PORT}"
+    environment:
+      - DEPARTAMENTOS_SERVICE_URL=http://departamentos-service:${DEPARTAMENTOS_SERVICE_PORT}
+      - MONGODB_URI=mongodb://database-empleados:27017/
+    depends_on:
+      - database-empleados
+      - departamentos-service
+    networks:
+      - microservicios-network
+
+  departamentos-service:
+    build: ./departamentos-service
+    container_name: departamentos-service
+    env_file:
+      - .env
+    ports:
+      - "${DEPARTAMENTOS_SERVICE_PORT}:${DEPARTAMENTOS_SERVICE_PORT}"
+    environment:
+      - MONGODB_URI=mongodb://database-departamentos:27017/
+    depends_on:
+      - database-departamentos
+    networks:
+      - microservicios-network
+
+volumes:
+  vol-empleados:
+  vol-departamentos:
+
+networks:
+  microservicios-network:
+    driver: bridge
