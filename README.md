@@ -112,19 +112,19 @@ Para la comunicación asíncrona entre microservicios, se evaluaron las siguient
 #### 1. RabbitMQ
 
 **Ventajas:**
-- ✅ Protocolo AMQP estándar y maduro
-- ✅ Fácil configuración y uso
-- ✅ Soporta múltiples patrones: colas, publish/subscribe, routing, topics
-- ✅ Gestión mediante UI web incluida (RabbitMQ Management)
-- ✅ Persistencia de mensajes configurable
-- ✅ Acknowledgment de mensajes
-- ✅ Dead letter queues para manejo de errores
-- ✅ Excelente documentación y comunidad
-- ✅ Ligero y fácil de containerizar
+-  Protocolo AMQP estándar y maduro
+-  Fácil configuración y uso
+-  Soporta múltiples patrones: colas, publish/subscribe, routing, topics
+-  Gestión mediante UI web incluida (RabbitMQ Management)
+-  Persistencia de mensajes configurable
+-  Acknowledgment de mensajes
+-  Dead letter queues para manejo de errores
+-  Excelente documentación y comunidad
+-  Ligero y fácil de containerizar
 
 **Desventajas:**
-- ❌ Menor throughput que Kafka en escenarios de muy alta carga
-- ❌ No es ideal para event sourcing a largo plazo
+-  Menor throughput que Kafka en escenarios de muy alta carga
+-  No es ideal para event sourcing a largo plazo
 
 **Casos de uso ideales:**
 - Comunicación entre microservicios
@@ -135,18 +135,18 @@ Para la comunicación asíncrona entre microservicios, se evaluaron las siguient
 #### 2. Apache Kafka
 
 **Ventajas:**
-- ✅ Alto throughput extremo (millones de mensajes/segundo)
-- ✅ Persistencia a largo plazo (logs inmutables)
-- ✅ Ideal para event sourcing y CQRS
-- ✅ Escalabilidad horizontal masiva
-- ✅ Múltiples consumidores independientes
+-  Alto throughput extremo (millones de mensajes/segundo)
+-  Persistencia a largo plazo (logs inmutables)
+-  Ideal para event sourcing y CQRS
+-  Escalabilidad horizontal masiva
+-  Múltiples consumidores independientes
 
 **Desventajas:**
-- ❌ Mayor complejidad de configuración y operación
-- ❌ Requiere ZooKeeper (aunque está cambiando en versiones recientes)
-- ❌ Overkill para sistemas pequeños/medianos
-- ❌ Curva de aprendizaje más pronunciada
-- ❌ Más recursos necesarios (memoria, CPU)
+-  Mayor complejidad de configuración y operación
+-  Requiere ZooKeeper (aunque está cambiando en versiones recientes)
+-  Overkill para sistemas pequeños/medianos
+-  Curva de aprendizaje más pronunciada
+-  Más recursos necesarios (memoria, CPU)
 
 **Casos de uso ideales:**
 - Streaming de datos a gran escala
@@ -159,27 +159,27 @@ Para la comunicación asíncrona entre microservicios, se evaluaron las siguient
 **Redis Streams:**
 
 **Ventajas:**
-- ✅ Muy baja latencia
-- ✅ Simple y ligero
-- ✅ Si ya usas Redis, es una característica adicional
+-  Muy baja latencia
+-  Simple y ligero
+-  Si ya usas Redis, es una característica adicional
 
 **Desventajas:**
-- ❌ Funcionalidades limitadas comparado con RabbitMQ/Kafka
-- ❌ Persistencia limitada
-- ❌ Patrones de mensajería menos maduros
-- ❌ No es su propósito principal
+-  Funcionalidades limitadas comparado con RabbitMQ/Kafka
+-  Persistencia limitada
+-  Patrones de mensajería menos maduros
+-  No es su propósito principal
 
 **NATS:**
 
 **Ventajas:**
-- ✅ Extremadamente rápido y ligero
-- ✅ Simple de operar
-- ✅ Bueno para IoT y mensajería en tiempo real
+-  Extremadamente rápido y ligero
+-  Simple de operar
+-  Bueno para IoT y mensajería en tiempo real
 
 **Desventajas:**
-- ❌ Menor adopción en enterprise
-- ❌ Ecosistema más pequeño
-- ❌ Menor madurez en patrones avanzados
+-  Menor adopción en enterprise
+-  Ecosistema más pequeño
+-  Menor madurez en patrones avanzados
 
 ### Justificación de la Elección: RabbitMQ
 
