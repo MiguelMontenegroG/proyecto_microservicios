@@ -10,6 +10,9 @@ import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
 import org.springframework.http.HttpStatus
 import com.microservicios.empleados_service.service.DepartamentoValidationService
+import com.microservicios.empleados_service.service.EmpleadoEventPublisher
+import com.microservicios.empleados_service.event.EmpleadoCreadoEvent
+import com.microservicios.empleados_service.event.EmpleadoEliminadoEvent
 import org.springframework.web.server.ResponseStatusException
 import org.springframework.context.annotation.Bean
 import io.swagger.v3.oas.annotations.Operation
@@ -20,6 +23,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
 import java.util.List
+
 @RestController
 @RequestMapping("/empleados")
 @Tag(name = "Empleados", description = "API para gestión de empleados")
@@ -30,6 +34,9 @@ class EmpleadoController {
     
     @Autowired
     DepartamentoValidationService departamentoValidationService
+    
+    @Autowired
+    EmpleadoEventPublisher eventPublisher
     
     private void validarDepartamento(String departamentoId) {
         departamentoValidationService.validarDepartamento(departamentoId)
@@ -70,6 +77,17 @@ class EmpleadoController {
             )
             
             usuarioRepository.save(usuario)
+            
+            // Publicar evento después de guardar exitosamente
+            EmpleadoCreadoEvent evento = new EmpleadoCreadoEvent(
+                id: empleado.id,
+                nombre: empleado.nombre,
+                email: empleado.email,
+                departamentoId: empleado.departamentoId,
+                fechaIngreso: empleado.fechaIngreso != null ? empleado.fechaIngreso.toString() : new Date().toString()
+            )
+            eventPublisher.publicarEmpleadoCreado(evento)
+            
             return ResponseEntity.status(HttpStatus.CREATED).body(empleado)
         } catch (ResponseStatusException e) {
             throw e
@@ -187,17 +205,53 @@ class EmpleadoController {
     @DeleteMapping("/{id}")
     @Operation(
         summary = "Eliminar empleado",
-        description = "Elimina un empleado del sistema (operación no permitida)"
+        description = "Elimina un empleado del sistema y publica evento de eliminación"
     )
     @Parameter(name = "id", description = "Identificador único del empleado", required = true)
-    @ApiResponse(responseCode = "405", description = "Método no permitido - Operación DELETE no soportada")
-    ResponseEntity<?> eliminar(@PathVariable("id") String id) {
-        if (id == null || id.trim().isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "ID de empleado no válido")
-        }
+    @ApiResponse(responseCode = "204", description = "Empleado eliminado exitosamente")
+    @ApiResponse(responseCode = "400", description = "ID no proporcionado")
+    @ApiResponse(responseCode = "404", description = "Empleado no encontrado")
+    @ApiResponse(responseCode = "500", description = "Error interno del servidor")
+    ResponseEntity<Void> eliminar(@PathVariable("id") String id) {
+        try {
+            if (id == null || id.trim().isEmpty()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "ID de empleado no válido")
+            }
 
-        // Siempre retornar 405 - Método no permitido, independientemente de si existe o no
-        throw new ResponseStatusException(HttpStatus.METHOD_NOT_ALLOWED, "La operación DELETE no está soportada para empleados")
+            // Verificar que el empleado exista
+            Usuario usuario = usuarioRepository.findById(id).orElse(null)
+            if (usuario == null) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Empleado no encontrado: no existe empleado con ID '${id}'")
+            }
+
+            // Guardar datos para el evento antes de eliminar
+            String nombre = usuario.nombreCompleto
+            String email = usuario.email
+
+            // Eliminar empleado
+            usuarioRepository.deleteById(id)
+            println "=== EMPLEADO ELIMINADO ==="
+            println "ID: ${id}"
+            println "Nombre: ${nombre}"
+            println "Email: ${email}"
+
+            // Publicar evento después de eliminar exitosamente
+            EmpleadoEliminadoEvent evento = new EmpleadoEliminadoEvent(
+                id: id,
+                nombre: nombre,
+                email: email
+            )
+            eventPublisher.publicarEmpleadoEliminado(evento)
+
+            return ResponseEntity.noContent().build()
+            
+        } catch (ResponseStatusException e) {
+            throw e
+        } catch (Exception e) {
+            println "ERROR AL ELIMINAR EMPLEADO: ${e.getClass().name} - ${e.getMessage()}"
+            e.printStackTrace()
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Error al eliminar empleado: ${e.getMessage()}")
+        }
     }
     
     @GetMapping

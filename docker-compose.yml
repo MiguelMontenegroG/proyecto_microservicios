@@ -35,9 +35,14 @@ services:
     environment:
       - DEPARTAMENTOS_SERVICE_URL=http://departamentos-service:${DEPARTAMENTOS_SERVICE_PORT}
       - MONGODB_URI=mongodb://database-empleados:27017/
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_USER=admin
+      - RABBITMQ_PASS=admin
     depends_on:
       - database-empleados
       - departamentos-service
+      - rabbitmq
     networks:
       - microservicios-network
 
@@ -55,9 +60,83 @@ services:
     networks:
       - microservicios-network
 
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      - RABBITMQ_DEFAULT_USER=admin
+      - RABBITMQ_DEFAULT_PASS=admin
+    networks:
+      - microservicios-network
+
+  database-perfiles:
+    image: mongo:${MONGO_VERSION:-7.0}
+    container_name: database-perfiles
+    env_file:
+      - .env
+    ports:
+      - "${MONGODB_PERF_PORT}:27017"
+    volumes:
+      - vol-perfiles:/data/db
+    networks:
+      - microservicios-network
+
+  database-notificaciones:
+    image: mongo:${MONGO_VERSION:-7.0}
+    container_name: database-notificaciones
+    env_file:
+      - .env
+    ports:
+      - "${MONGODB_NOTIF_PORT}:27017"
+    volumes:
+      - vol-notificaciones:/data/db
+    networks:
+      - microservicios-network
+
+  perfiles-service:
+    build: ./perfiles-service
+    container_name: perfiles-service
+    ports:
+      - "${PERFILES_SERVICE_PORT}:${PERFILES_SERVICE_PORT}"
+    environment:
+      - MONGODB_URI=mongodb://database-perfiles:27017/
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_USER=admin
+      - RABBITMQ_PASS=admin
+      - SPRING_PROFILES_ACTIVE=docker
+    depends_on:
+      - database-perfiles
+      - rabbitmq
+    networks:
+      - microservicios-network
+
+  notificaciones-service:
+    build: ./notificaciones-service
+    container_name: notificaciones-service
+    ports:
+      - "${NOTIFICACIONES_SERVICE_PORT}:${NOTIFICACIONES_SERVICE_PORT}"
+    environment:
+      - MONGODB_URI=mongodb://database-notificaciones:27017/
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_USER=admin
+      - RABBITMQ_PASS=admin
+      - SPRING_PROFILES_ACTIVE=docker
+    depends_on:
+      - database-notificaciones
+      - rabbitmq
+    networks:
+      - microservicios-network
+
 volumes:
   vol-empleados:
   vol-departamentos:
+  vol-perfiles:
+  vol-notificaciones:
 
 networks:
   microservicios-network:
