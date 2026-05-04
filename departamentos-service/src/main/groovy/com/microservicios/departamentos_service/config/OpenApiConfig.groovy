@@ -4,6 +4,9 @@ import io.swagger.v3.oas.models.OpenAPI
 import io.swagger.v3.oas.models.info.Info
 import io.swagger.v3.oas.models.info.Contact
 import io.swagger.v3.oas.models.info.License
+import io.swagger.v3.oas.models.security.SecurityRequirement
+import io.swagger.v3.oas.models.security.SecurityScheme
+import io.swagger.v3.oas.models.Components
 import io.swagger.v3.oas.models.servers.Server
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
@@ -46,11 +49,22 @@ class OpenApiConfig {
                     - 404: Departamento no encontrado
                     - 409: Departamento duplicado o conflicto
                     - 500: Error interno del servidor
+                    
+                    ## Seguridad:
+                    Todos los endpoints requieren autenticación JWT.
+                    Incluir header: Authorization: Bearer <token>
                 """)
 
                 .license(new License()
                     .name("Apache 2.0")
                     .url("http://springdoc.org")))
+            .addSecurityItem(new SecurityRequirement().addList("Bearer Authentication"))
+            .components(new Components()
+                .addSecuritySchemes("Bearer Authentication", new SecurityScheme()
+                    .type(SecurityScheme.Type.HTTP)
+                    .scheme("bearer")
+                    .bearerFormat("JWT")
+                    .description("Ingrese el token JWT obtenido desde /auth/login")))
             .addServersItem(new Server()
                 .url("http://localhost:8081")
                 .description("Servidor de desarrollo local"))

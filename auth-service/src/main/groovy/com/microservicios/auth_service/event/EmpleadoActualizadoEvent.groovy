@@ -1,0 +1,13 @@
+package com.microservicios.auth_service.event
+
+import groovy.transform.ToString
+import java.io.Serializable
+
+@ToString(includeNames = true)
+class EmpleadoActualizadoEvent implements Serializable {
+    String id
+    String nombre
+    String email
+    String departamentoId
+    String tipo = 'empleado.actualizado'
+}

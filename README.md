@@ -10,7 +10,7 @@ Este sistema implementa una arquitectura de microservicios que combina:
 
 ### Características principales
 
-* **4 microservicios independientes** (empleados, departamentos, perfiles, notificaciones)  
+* **5 microservicios independientes** (empleados, departamentos, perfiles, notificaciones, autenticación)  
 * **4 bases de datos MongoDB** (una por servicio, sin compartir datos)  
 * **RabbitMQ** como message broker para eventos  
 * **Patrón Fan-out**: Un evento → Múltiples consumidores  
@@ -18,6 +18,7 @@ Este sistema implementa una arquitectura de microservicios que combina:
 * **Dockerizado** y listo para desplegar con docker-compose  
 * **Resiliente** con Resilience4j (circuit breaker)  
 * **Automatización**: Creación de perfil y notificación al crear empleado
+* **Seguridad JWT**: Autenticación y autorización con tokens JSON Web Token
 
 ## Arquitectura
 
@@ -65,6 +66,21 @@ Este sistema implementa una arquitectura de microservicios que combina:
       ┌───────────┐
       │  MongoDB  │
       │Departamentos
+      └───────────┘
+
+┌─────────────────────────┐
+│   Auth Service :8085    │
+│                         │
+│  - Login/Logout         │
+│  - JWT Token Mgmt       │
+│  - User Validation      │
+│  - Password Recovery    │
+└───────────┬─────────────┘
+            │
+            ▼
+      ┌───────────┐
+      │  MongoDB  │
+      │   Auth    │
       └───────────┘
 ```
 
@@ -214,6 +230,11 @@ Para este proyecto de microservicios de gestión empresarial, se eligió **Rabbi
 
 ```
 proyecto/
+├── auth-service/
+│   ├── src/
+│   ├── build.gradle
+│   ├── Dockerfile
+│   └── README.md
 ├── departamentos-service/
 │   ├── src/
 │   ├── build.gradle
@@ -256,6 +277,10 @@ DEPARTAMENTOS_SERVICE_PORT=8081
 MONGODB_EMPL_PORT=27017
 MONGODB_DEP_PORT=27018
 
+# Puerto Auth Service (Reto 4)
+AUTH_SERVICE_PORT=8085
+MONGODB_AUTH_PORT=27021
+
 # Puertos Nuevos Servicios Reto 3
 PERFILES_SERVICE_PORT=8083
 NOTIFICACIONES_SERVICE_PORT=8084
@@ -269,7 +294,9 @@ RABBITMQ_USER=admin
 RABBITMQ_PASS=admin
 
 # MongoDB URIs
-MONGODB_URI=mongodb://database-empleados:27017/
+MONGODB_URI=mongodb://database-auth:27017/
+MONGODB_DATABASE_AUTH=authdb
+MONGODB_URI_EMPLEADOS=mongodb://database-empleados:27017/
 MONGODB_DATABASE_EMPLEADOS=empleadosdb
 MONGODB_DATABASE_DEPARTAMENTOS=departamentosdb
 MONGODB_DATABASE_PERFILES=perfilesdb
@@ -277,6 +304,7 @@ MONGODB_DATABASE_NOTIFICACIONES=notificacionesdb
 
 # URLs entre servicios
 DEPARTAMENTOS_SERVICE_URL=http://departamentos-service:8081
+AUTH_SERVICE_URL=http://auth-service:8085
 
 # Logging
 LOGGING_LEVEL_ROOT=INFO
@@ -383,6 +411,13 @@ docker-compose ps
 - **API Docs**: http://localhost:8084/v3/api-docs
 - **Actuator Health**: http://localhost:8084/actuator/health
 
+### Auth Service
+
+- **Servicio**: http://localhost:8085
+- **Swagger UI**: http://localhost:8085/swagger-ui.html
+- **API Docs**: http://localhost:8085/v3/api-docs
+- **Actuator Health**: http://localhost:8085/actuator/health
+
 ### RabbitMQ Management
 
 - **Interfaz Web**: http://localhost:15672
@@ -457,6 +492,9 @@ curl http://localhost:8083/actuator/health
 
 # Notificaciones Service
 curl http://localhost:8084/actuator/health
+
+# Auth Service
+curl http://localhost:8085/actuator/health
 ```
 
 #### 3. Crear departamento (requisito previo)
@@ -579,6 +617,7 @@ Verificar:
 - Departamentos: http://localhost:8081/swagger-ui.html
 - Perfiles: http://localhost:8083/swagger-ui.html
 - Notificaciones: http://localhost:8084/swagger-ui.html
+- Auth: http://localhost:8085/swagger-ui.html
 
 ## Eventos del Sistema (Reto 3)
 
@@ -675,6 +714,13 @@ Verificar:
 
 - `GET /notificaciones` - Listar todas las notificaciones
 - `GET /notificaciones/{empleadoId}` - Consultar notificaciones por empleado
+
+### auth-service (:8085)
+
+- `POST /auth/login` - Autenticar usuario y obtener token JWT
+- `GET /auth/validate` - Validar token JWT
+- `POST /auth/forgot-password` - Solicitar recuperación de contraseña
+- `POST /auth/reset-password` - Restablecer contraseña con token
 
 ## Justificación de RabbitMQ
 
@@ -900,6 +946,7 @@ curl http://localhost:8080/actuator/health
 curl http://localhost:8081/actuator/health
 curl http://localhost:8083/actuator/health
 curl http://localhost:8084/actuator/health
+curl http://localhost:8085/actuator/health
 ```
 
 ### Detener el sistema
@@ -910,6 +957,229 @@ docker-compose down
 
 # Detener y eliminar volúmenes (borra datos)
 docker-compose down -v
+```
+
+---
+
+## Seguridad y Autenticación JWT (Reto 4)
+
+El sistema incluye un servicio de autenticación (`auth-service`) que proporciona seguridad basada en tokens JWT (JSON Web Tokens).
+
+### Características de Seguridad
+
+- **Autenticación stateless**: Los tokens JWT permiten autenticación sin estado en el servidor
+- **Autorización basada en roles**: Soporte para roles ADMIN y USER
+- **Tokens con expiración**: Configuración de tiempo de vida del token
+- **Contraseñas encriptadas**: BCrypt para hash de contraseñas
+- **Recuperación de contraseña**: Flujo seguro de recuperación con tokens temporales
+
+### Endpoints de Autenticación
+
+#### 1. Login - POST /auth/login
+
+Autentica un usuario y retorna un token JWT.
+
+**Request:**
+```json
+{
+  "username": "juan.perez",
+  "password": "password123"
+}
+```
+
+**Response 200 OK:**
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "username": "juan.perez",
+  "role": "USER",
+  "expiresIn": 86400000
+}
+```
+
+**Códigos de respuesta:**
+- `200` - Login exitoso
+- `400` - Datos inválidos o formato incorrecto
+- `401` - Credenciales inválidas (usuario o contraseña incorrectos)
+- `403` - Usuario inactivo o bloqueado
+- `500` - Error interno del servidor
+
+#### 2. Validar Token - GET /auth/validate?token={token}
+
+Valida si un token JWT es válido y retorna información del usuario.
+
+**Response 200 OK:**
+```json
+{
+  "valid": true,
+  "username": "juan.perez",
+  "role": "USER"
+}
+```
+
+**Códigos de respuesta:**
+- `200` - Token válido
+- `400` - Token no proporcionado o formato inválido
+- `401` - Token inválido o expirado
+- `403` - Acceso denegado - usuario no autorizado
+- `500` - Error interno al validar token
+
+#### 3. Recuperar Contraseña - POST /auth/forgot-password
+
+Solicita un token de recuperación de contraseña.
+
+**Request:**
+```json
+{
+  "email": "juan@empresa.com"
+}
+```
+
+**Response 200 OK (cuando el usuario existe):**
+```json
+{
+  "message": "Token de recuperación generado",
+  "resetToken": "abc123xyz456...",
+  "instruction": "Usa este token en POST /auth/reset-password con tu nueva contraseña"
+}
+```
+
+**Response 200 OK (cuando el usuario NO existe - por seguridad):**
+```json
+{
+  "message": "Si el email existe, se ha enviado el token de recuperación"
+}
+```
+
+**Códigos de respuesta:**
+- `200` - Token generado exitosamente (o email no existe por seguridad)
+- `400` - Formato de email inválido
+- `403` - Usuario inactivo o bloqueado - no se permite recuperación
+- `500` - Error interno
+
+**Nota de seguridad:** Por razones de seguridad, la API siempre retorna éxito aunque el email no exista, para evitar enumeración de usuarios. **El token solo se muestra en la respuesta cuando el usuario existe realmente.**
+
+#### 4. Restablecer Contraseña - POST /auth/reset-password
+
+Establece una nueva contraseña usando el token de recuperación.
+
+**Request:**
+```json
+{
+  "token": "abc123xyz...",
+  "newPassword": "nuevaPassword123"
+}
+```
+
+**Response 200 OK:**
+```json
+{
+  "message": "Contraseña restablecida exitosamente"
+}
+```
+
+**Códigos de respuesta:**
+- `200` - Contraseña restablecida
+- `400` - Token inválido, expirado o contraseña débil
+- `500` - Error interno
+
+### Uso de Tokens JWT
+
+Para acceder a endpoints protegidos, incluir el token en el header:
+
+```
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+
+### Resumen de Códigos de Respuesta HTTP
+
+El auth-service utiliza los siguientes códigos de respuesta HTTP según el estándar REST:
+
+#### Códigos de Éxito (2xx)
+- **`200 OK`**: Solicitud exitosa
+  - Login correcto
+  - Token válido
+  - Contraseña restablecida
+  - Recuperación solicitada
+
+#### Códigos de Error del Cliente (4xx)
+- **`400 Bad Request`**: Datos inválidos o formato incorrecto
+  - Campos requeridos faltantes
+  - Formato de email inválido
+  - Contraseña muy débil
+  - Token con formato incorrecto
+  
+- **`401 Unauthorized`**: Credenciales o token inválidos
+  - Usuario o contraseña incorrectos
+  - Token JWT inválido
+  - Token JWT expirado
+  
+- **`403 Forbidden`**: Acceso denegado
+  - Usuario inactivo
+  - Usuario bloqueado
+  - No tiene permisos para la acción
+  - Usuario no autorizado para recuperación
+  
+- **`404 Not Found`**: Recurso no encontrado
+  - Usuario no existe (aunque por seguridad no se revela en forgot-password)
+  - Token de recuperación no existe
+  
+- **`409 Conflict`**: Conflicto con el estado actual
+  - Email ya registrado (al crear usuario)
+  - Username ya existe
+
+#### Códigos de Error del Servidor (5xx)
+- **`500 Internal Server Error`**: Error interno del servidor
+  - Error al procesar login
+  - Error al validar token
+  - Error al generar token de recuperación
+  - Error al restablecer contraseña
+  - Error de conexión con MongoDB
+  - Error de conexión con RabbitMQ
+
+### Configuración de Seguridad
+
+**Variables de entorno requeridas:**
+
+```properties
+# JWT Configuration
+JWT_SECRET=tu_secreto_muy_seguro_y_largo_minimo_32_caracteres
+JWT_EXPIRATION=86400000
+```
+
+**Recomendaciones de producción:**
+- Usar un JWT_SECRET único y seguro (mínimo 32 caracteres)
+- Rotar el secreto periódicamente
+- Usar HTTPS en producción
+- Configurar tiempos de expiración apropiados
+- Implementar refresh tokens para sesiones largas
+
+### Base de Datos de Usuarios
+
+El auth-service utiliza MongoDB para almacenar:
+- Credenciales de usuarios (contraseñas encriptadas con BCrypt)
+- Información de usuarios (username, email, rol)
+- Tokens de recuperación de contraseña
+- Estados de cuenta (activo/inactivo)
+
+### Flujo de Autenticación
+
+```
+Cliente → POST /auth/login → Auth Service
+                              ↓
+                         Validar credenciales
+                              ↓
+                         Generar JWT Token
+                              ↓
+                         Retornar Token
+                              ↓
+Cliente ← Token JWT ←───────┘
+                              ↓
+Cliente → Request con Token → Servicio Protegido
+                              ↓
+                         Validar Token (JwtAuthenticationFilter)
+                              ↓
+                         Procesar Request
 ```
 
 ---

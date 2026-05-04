@@ -2,6 +2,10 @@ package com.microservicios.departamentos_service.controller
 
 import com.microservicios.departamentos_service.model.Departamento
 import com.microservicios.departamentos_service.repository.DepartamentoRepository
+import com.microservicios.departamentos_service.service.DepartamentoEventPublisher
+import com.microservicios.departamentos_service.event.DepartamentoCreadoEvent
+import com.microservicios.departamentos_service.event.DepartamentoActualizadoEvent
+import com.microservicios.departamentos_service.event.DepartamentoEliminadoEvent
 import jakarta.validation.Valid
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.HttpStatus
@@ -13,14 +17,19 @@ import io.swagger.v3.oas.annotations.media.Content
 import io.swagger.v3.oas.annotations.media.Schema
 import io.swagger.v3.oas.annotations.responses.ApiResponse
 import io.swagger.v3.oas.annotations.tags.Tag
+import io.swagger.v3.oas.annotations.security.SecurityRequirement
 
 @RestController
 @RequestMapping("/departamentos")
 @Tag(name = "Departamentos", description = "API para gestión de departamentos de la organización")
+@SecurityRequirement(name = "Bearer Authentication")
 class DepartamentoController {
 
     @Autowired
     DepartamentoRepository departamentoRepository
+    
+    @Autowired
+    DepartamentoEventPublisher eventPublisher
 
     @PostMapping
     @Operation(
@@ -45,6 +54,15 @@ class DepartamentoController {
             }
             
             Departamento savedDepartamento = departamentoRepository.save(departamento)
+            
+            // Publicar evento después de crear exitosamente
+            DepartamentoCreadoEvent evento = new DepartamentoCreadoEvent(
+                id: savedDepartamento.id,
+                nombre: savedDepartamento.nombre,
+                descripcion: savedDepartamento.descripcion
+            )
+            eventPublisher.publicarDepartamentoCreado(evento)
+            
             return new ResponseEntity<>(savedDepartamento, HttpStatus.CREATED)
         } catch (Exception e) {
             return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -124,6 +142,15 @@ class DepartamentoController {
             deptToUpdate.descripcion = departamento.descripcion ?: deptToUpdate.descripcion
             
             Departamento updatedDepartamento = departamentoRepository.save(deptToUpdate)
+            
+            // Publicar evento después de actualizar exitosamente
+            DepartamentoActualizadoEvent evento = new DepartamentoActualizadoEvent(
+                id: updatedDepartamento.id,
+                nombre: updatedDepartamento.nombre,
+                descripcion: updatedDepartamento.descripcion
+            )
+            eventPublisher.publicarDepartamentoActualizado(evento)
+            
             return new ResponseEntity<>(updatedDepartamento, HttpStatus.OK)
             
         } catch (Exception e) {
@@ -164,7 +191,18 @@ class DepartamentoController {
             
             // Esta validación requeriría comunicación con el servicio de empleados
             
+            // Guardar datos para el evento antes de eliminar
+            String nombre = departamentoExistente.get().nombre
+            
             departamentoRepository.deleteById(id)
+            
+            // Publicar evento después de eliminar exitosamente
+            DepartamentoEliminadoEvent evento = new DepartamentoEliminadoEvent(
+                id: id,
+                nombre: nombre
+            )
+            eventPublisher.publicarDepartamentoEliminado(evento)
+            
             return new ResponseEntity<>(HttpStatus.NO_CONTENT)
             
         } catch (Exception e) {

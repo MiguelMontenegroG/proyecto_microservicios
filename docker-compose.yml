@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   database-empleados:
     image: mongo:${MONGO_VERSION:-7.0}
@@ -22,53 +20,6 @@ services:
       - "${MONGODB_DEP_PORT}:27017"
     volumes:
       - vol-departamentos:/data/db
-    networks:
-      - microservicios-network
-
-  empleados-service:
-    build: ./empleados-service
-    container_name: empleados-service
-    env_file:
-      - .env
-    ports:
-      - "${EMPLEADOS_SERVICE_PORT}:${EMPLEADOS_SERVICE_PORT}"
-    environment:
-      - DEPARTAMENTOS_SERVICE_URL=http://departamentos-service:${DEPARTAMENTOS_SERVICE_PORT}
-      - MONGODB_URI=mongodb://database-empleados:27017/
-      - RABBITMQ_HOST=rabbitmq
-      - RABBITMQ_PORT=5672
-      - RABBITMQ_USER=admin
-      - RABBITMQ_PASS=admin
-    depends_on:
-      - database-empleados
-      - departamentos-service
-      - rabbitmq
-    networks:
-      - microservicios-network
-
-  departamentos-service:
-    build: ./departamentos-service
-    container_name: departamentos-service
-    env_file:
-      - .env
-    ports:
-      - "${DEPARTAMENTOS_SERVICE_PORT}:${DEPARTAMENTOS_SERVICE_PORT}"
-    environment:
-      - MONGODB_URI=mongodb://database-departamentos:27017/
-    depends_on:
-      - database-departamentos
-    networks:
-      - microservicios-network
-
-  rabbitmq:
-    image: rabbitmq:3-management
-    container_name: rabbitmq
-    ports:
-      - "5672:5672"
-      - "15672:15672"
-    environment:
-      - RABBITMQ_DEFAULT_USER=admin
-      - RABBITMQ_DEFAULT_PASS=admin
     networks:
       - microservicios-network
 
@@ -96,39 +47,213 @@ services:
     networks:
       - microservicios-network
 
+  database-auth:
+    image: mongo:${MONGO_VERSION:-7.0}
+    container_name: database-auth
+    env_file:
+      - .env
+    ports:
+      - "${MONGODB_AUTH_PORT}:27017"
+    volumes:
+      - vol-auth:/data/db
+    networks:
+      - microservicios-network
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: admin
+    networks:
+      - microservicios-network
+
+  auth-service:
+    build: ./auth-service
+    container_name: auth-service
+    env_file:
+      - .env
+    ports:
+      - "${AUTH_SERVICE_PORT}:${AUTH_SERVICE_PORT}"
+    environment:
+      MONGODB_URI: mongodb://database-auth:27017/
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: admin
+      RABBITMQ_PASS: admin
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS}
+      EMPLEADOS_SERVICE_URL: http://empleados-service:${EMPLEADOS_SERVICE_PORT}
+      SPRING_PROFILES_ACTIVE: docker
+    depends_on:
+      database-auth:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+    networks:
+      - microservicios-network
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:${AUTH_SERVICE_PORT}/actuator/health"]
+      interval: 15s
+      timeout: 10s
+      start_period: 60s
+      retries: 10
+
+  empleados-service:
+    build: ./empleados-service
+    container_name: empleados-service
+    env_file:
+      - .env
+    ports:
+      - "${EMPLEADOS_SERVICE_PORT}:${EMPLEADOS_SERVICE_PORT}"
+    environment:
+      DEPARTAMENTOS_SERVICE_URL: http://departamentos-service:${DEPARTAMENTOS_SERVICE_PORT}
+      MONGODB_URI: mongodb://database-empleados:27017/
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: admin
+      RABBITMQ_PASS: admin
+      SPRING_PROFILES_ACTIVE: docker
+    depends_on:
+      database-empleados:
+        condition: service_started
+      departamentos-service:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+    networks:
+      - microservicios-network
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:${EMPLEADOS_SERVICE_PORT}/actuator/health"]
+      interval: 15s
+      timeout: 10s
+      start_period: 60s
+      retries: 10
+
+  departamentos-service:
+    build: ./departamentos-service
+    container_name: departamentos-service
+    env_file:
+      - .env
+    ports:
+      - "${DEPARTAMENTOS_SERVICE_PORT}:${DEPARTAMENTOS_SERVICE_PORT}"
+    environment:
+      MONGODB_URI: mongodb://database-departamentos:27017/
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: admin
+      RABBITMQ_PASS: admin
+      SPRING_PROFILES_ACTIVE: docker
+    depends_on:
+      database-departamentos:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+    networks:
+      - microservicios-network
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:${DEPARTAMENTOS_SERVICE_PORT}/actuator/health"]
+      interval: 15s
+      timeout: 10s
+      start_period: 60s
+      retries: 10
+
   perfiles-service:
     build: ./perfiles-service
     container_name: perfiles-service
+    env_file:
+      - .env
     ports:
       - "${PERFILES_SERVICE_PORT}:${PERFILES_SERVICE_PORT}"
     environment:
-      - MONGODB_URI=mongodb://database-perfiles:27017/
-      - RABBITMQ_HOST=rabbitmq
-      - RABBITMQ_PORT=5672
-      - RABBITMQ_USER=admin
-      - RABBITMQ_PASS=admin
-      - SPRING_PROFILES_ACTIVE=docker
+      MONGODB_URI: mongodb://database-perfiles:27017/
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: admin
+      RABBITMQ_PASS: admin
+      SPRING_PROFILES_ACTIVE: docker
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS}
     depends_on:
-      - database-perfiles
-      - rabbitmq
+      database-perfiles:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
     networks:
       - microservicios-network
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:${PERFILES_SERVICE_PORT}/actuator/health"]
+      interval: 15s
+      timeout: 10s
+      start_period: 60s
+      retries: 10
 
   notificaciones-service:
     build: ./notificaciones-service
     container_name: notificaciones-service
+    env_file:
+      - .env
     ports:
       - "${NOTIFICACIONES_SERVICE_PORT}:${NOTIFICACIONES_SERVICE_PORT}"
     environment:
-      - MONGODB_URI=mongodb://database-notificaciones:27017/
-      - RABBITMQ_HOST=rabbitmq
-      - RABBITMQ_PORT=5672
-      - RABBITMQ_USER=admin
-      - RABBITMQ_PASS=admin
-      - SPRING_PROFILES_ACTIVE=docker
+      MONGODB_URI: mongodb://database-notificaciones:27017/
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: admin
+      RABBITMQ_PASS: admin
+      SPRING_PROFILES_ACTIVE: docker
     depends_on:
-      - database-notificaciones
-      - rabbitmq
+      database-notificaciones:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+    networks:
+      - microservicios-network
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:${NOTIFICACIONES_SERVICE_PORT}/actuator/health"]
+      interval: 15s
+      timeout: 10s
+      start_period: 60s
+      retries: 10
+
+  e2e-tests:
+    build:
+      context: .
+      dockerfile: Dockerfile.e2e-tests
+    container_name: e2e-tests
+    env_file:
+      - .env
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      empleados-service:
+        condition: service_healthy
+      departamentos-service:
+        condition: service_healthy
+      perfiles-service:
+        condition: service_healthy
+      notificaciones-service:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+    environment:
+      BASE_URL: http://auth-service:${AUTH_SERVICE_PORT}
+      AUTH_URL: http://auth-service:${AUTH_SERVICE_PORT}
+      EMPLEADOS_URL: http://empleados-service:${EMPLEADOS_SERVICE_PORT}
+      DEPARTAMENTOS_URL: http://departamentos-service:${DEPARTAMENTOS_SERVICE_PORT}
+      NOTIFICACIONES_URL: http://notificaciones-service:${NOTIFICACIONES_SERVICE_PORT}
+      ADMIN_USER: admin
+      ADMIN_PASSWORD: password123
+      REGULAR_USER: user
+      REGULAR_PASSWORD: password123
+      AUTH_SERVICE_PORT: ${AUTH_SERVICE_PORT}
+      EMPLEADOS_SERVICE_PORT: ${EMPLEADOS_SERVICE_PORT}
+      DEPARTAMENTOS_SERVICE_PORT: ${DEPARTAMENTOS_SERVICE_PORT}
+      NOTIFICACIONES_SERVICE_PORT: ${NOTIFICACIONES_SERVICE_PORT}
+      SPRING_PROFILES_ACTIVE: docker
     networks:
       - microservicios-network
 
@@ -137,6 +262,7 @@ volumes:
   vol-departamentos:
   vol-perfiles:
   vol-notificaciones:
+  vol-auth:
 
 networks:
   microservicios-network:

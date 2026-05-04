@@ -30,6 +30,10 @@ class NotificacionEventConsumer {
             procesarEmpleadoCreado(evento)
         } else if (tipoEvento == 'empleado.eliminado') {
             procesarEmpleadoEliminado(evento)
+        } else if (tipoEvento == 'usuario.creado') {
+            procesarUsuarioCreado(evento)
+        } else if (tipoEvento == 'usuario.recuperacion') {
+            procesarUsuarioRecuperacion(evento)
         } else {
             log.info("Evento {} no reconocido", tipoEvento)
         }
@@ -80,6 +84,77 @@ Mensaje: ${mensaje}
 Tipo: DESVINCULACION
 Para: ${email}
 Mensaje: ${mensaje}
+""")
+    }
+    
+    private void procesarUsuarioCreado(Map evento) {
+        String username = evento.get('username')
+        String email = evento.get('email')
+        String resetToken = evento.get('resetToken')
+        
+        // Simular envío de email con link de activación
+        String mensaje = "Bienvenido ${username}. Para activar tu cuenta y establecer tu contraseña, usa el siguiente token: ${resetToken}"
+        String linkActivacion = "http://localhost:8085/auth/reset-password (usar token: ${resetToken})"
+        
+        Notificacion notificacion = new Notificacion(
+            tipo: 'ACTIVACION_CUENTA',
+            destinatario: email,
+            mensaje: mensaje,
+            empleadoId: null
+        )
+        
+        notificacionRepository.save(notificacion)
+        
+        log.info("""
+========================================
+[SIMULACIÓN DE EMAIL - ACTIVACIÓN DE CUENTA]
+========================================
+Para: ${email}
+Username: ${username}
+Token de Activación: ${resetToken}
+Link de Activación: ${linkActivacion}
+
+INSTRUCCIONES:
+1. Ve a: http://localhost:8085/swagger-ui.html
+2. Usa el endpoint POST /auth/reset-password
+3. Body: {"token": "${resetToken}", "newPassword": "tu_password"}
+4. Luego podrás hacer login con tu nueva contraseña
+========================================
+""")
+    }
+    
+    private void procesarUsuarioRecuperacion(Map evento) {
+        String username = evento.get('username')
+        String email = evento.get('email')
+        String resetToken = evento.get('resetToken')
+        
+        // Simular envío de email de recuperación
+        String mensaje = "Hola ${username}. Has solicitado recuperar tu contraseña. Usa el siguiente token: ${resetToken}"
+        String linkRecuperacion = "http://localhost:8085/auth/reset-password (usar token: ${resetToken})"
+        
+        Notificacion notificacion = new Notificacion(
+            tipo: 'RECUPERACION_PASSWORD',
+            destinatario: email,
+            mensaje: mensaje,
+            empleadoId: null
+        )
+        
+        notificacionRepository.save(notificacion)
+        
+        log.info("""
+========================================
+[SIMULACIÓN DE EMAIL - RECUPERACIÓN DE CONTRASEÑA]
+========================================
+Para: ${email}
+Username: ${username}
+Token de Recuperación: ${resetToken}
+Link de Recuperación: ${linkRecuperacion}
+
+INSTRUCCIONES:
+1. Ve a: http://localhost:8085/swagger-ui.html
+2. Usa el endpoint POST /auth/reset-password
+3. Body: {"token": "${resetToken}", "newPassword": "nueva_password"}
+========================================
 """)
     }
 }
