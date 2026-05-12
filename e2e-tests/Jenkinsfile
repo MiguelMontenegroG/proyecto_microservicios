@@ -1,0 +1,128 @@
+pipeline {
+  agent any
+
+  environment {
+    AUTH_SERVICE_PORT = '8085'
+    EMPLEADOS_SERVICE_PORT = '8080'
+    DEPARTAMENTOS_SERVICE_PORT = '8081'
+    PERFILES_SERVICE_PORT = '8083'
+    NOTIFICACIONES_SERVICE_PORT = '8084'
+    COMPOSE_FILE = '/code/docker-compose.yml'
+    COMPOSE_PROJECT_NAME = 'microservicios'
+    E2E_DIR = '/code/e2e-tests'
+  }
+
+  stages {
+    stage('Deploy System') {
+      steps {
+        script {
+          // Detener sistema previo si existe
+          try {
+            sh 'docker-compose -f ${COMPOSE_FILE} -p ${COMPOSE_PROJECT_NAME} down --remove-orphans'
+            echo 'Sistema previo detenido'
+              } catch (Exception e) {
+            echo 'No habia sistema previo que detener'
+              }
+          // Desplegar sistema
+        sh 'docker-compose -f ${COMPOSE_FILE} -p ${COMPOSE_PROJECT_NAME} up -d --build'
+        echo 'Sistema desplegado, esperando inicializacion...'
+            }
+          }
+    }
+
+    stage('Wait for Services') {
+      steps {
+        script {
+          def services = [
+            [name: 'auth-service', url: "http://auth-service:${AUTH_SERVICE_PORT}/actuator/health"],
+            [name: 'empleados-service', url: "http://empleados-service:${EMPLEADOS_SERVICE_PORT}/actuator/health"],
+            [name: 'departamentos-service', url: "http://departamentos-service:${DEPARTAMENTOS_SERVICE_PORT}/actuator/health"],
+            [name: 'notificaciones-service', url: "http://notificaciones-service:${NOTIFICACIONES_SERVICE_PORT}/actuator/health"],
+            [name: 'perfiles-service', url: "http://perfiles-service:${PERFILES_SERVICE_PORT}/actuator/health"]
+          ]
+
+          def allReady = false
+          def maxRetries = 30
+          def retryCount = 0
+
+          while (!allReady && retryCount < maxRetries) {
+            allReady = true
+            for (service in services) {
+              try {
+                def result = sh(
+                  script: "curl -s -o /dev/null -w '%{http_code}' ${service.url} || echo '000'",
+                  returnStdout: true
+                ).trim()
+                if (result != '200') {
+                  echo "Servicio ${service.name} no disponible (HTTP ${result})"
+                  allReady = false
+                } else {
+                  echo "Servicio ${service.name} listo"
+                }
+        } catch (Exception e) {
+                echo "Error verificando ${service.name}: ${e.message}"
+                allReady = false
+        }
+      }
+            if (!allReady) {
+              retryCount++
+              echo "Intento ${retryCount}/${maxRetries} - Esperando 10s..."
+              sleep(10)
+    }
+    }
+
+          if (!allReady) {
+            error 'No todos los servicios estan disponibles despues de esperar'
+    }
+          echo "Todos los servicios estan listos!"
+  }
+}
+    }
+
+    stage('E2E Tests') {
+      steps {
+        script {
+          sh """
+            docker run --rm \
+              --volumes-from jenkins \
+              -w ${E2E_DIR} \
+              --network proyecto_microservicios-network \
+              maven:3.9.6-eclipse-temurin-21 \
+              mvn test \
+              -DbaseUrl="http://auth-service:${AUTH_SERVICE_PORT}" \
+              -DadminUser="admin" \
+              -DadminPassword="password123" \
+              -DregularUser="user" \
+              -DregularPassword="password123"
+          """
+        }
+      }
+      post {
+        always {
+          junit "${E2E_DIR}/target/surefire-reports/*.xml"
+        }
+      }
+    }
+  }
+
+  post {
+    always {
+      script {
+        try {
+          sh 'docker-compose -f ${COMPOSE_FILE} -p ${COMPOSE_PROJECT_NAME} down --remove-orphans'
+          echo 'Sistema detenido y limpiado'
+        } catch (Exception e) {
+          echo 'Error al detener el sistema: ' + e.message
+        }
+      }
+      cleanWs()
+      echo 'Pipeline E2E finalizado'
+    }
+    success {
+      echo 'Pruebas E2E completadas exitosamente'
+    }
+    failure {
+      echo 'Pruebas E2E han fallado'
+    }
+  }
+}

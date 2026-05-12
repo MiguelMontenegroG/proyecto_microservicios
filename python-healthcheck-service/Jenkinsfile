@@ -1,0 +1,125 @@
+pipeline {
+  agent any
+
+  environment {
+    SONAR_HOST_URL = 'http://sonarqube:9000'
+    SONAR_TOKEN = credentials('sonarqube-token')
+    DOCKER_REGISTRY = 'localhost:5000'
+    IMAGE_NAME = 'python-healthcheck-service'
+    PIP_CACHE = '/tmp/.pip'
+    CODE_DIR = '/code'
+  }
+
+  stages {
+    stage('Install Dependencies') {
+      steps {
+        script {
+          sh """
+            docker run --rm \
+              --volumes-from jenkins \
+              -w ${CODE_DIR}/python-healthcheck-service \
+              python:3.12-slim \
+              pip install --no-cache-dir -r src/requirements.txt
+          """
+        }
+      }
+    }
+    stage('Test') {
+      steps {
+        script {
+          sh """
+            docker run --rm \
+              --volumes-from jenkins \
+              -w ${CODE_DIR}/python-healthcheck-service \
+              python:3.12-slim \
+              sh -c "pip install --no-cache-dir -r src/requirements.txt && cd src && pytest --cov --cov-report=xml:coverage.xml --cov-report=html --junitxml=test-results.xml" || EXIT_CODE=\$?
+            exit \${EXIT_CODE:-0}
+          """
+        }
+      }
+      post {
+        always {
+          junit "${CODE_DIR}/python-healthcheck-service/src/test-results.xml"
+        }
+      }
+    }
+
+    stage('SonarQube Analysis') {
+      steps {
+        script {
+          sh """
+              docker run --rm \
+              --volumes-from jenkins \
+              -w ${CODE_DIR}/python-healthcheck-service \
+                --network proyecto_microservicios-network \
+                -e SONAR_HOST_URL=${SONAR_HOST_URL} \
+                -e SONAR_TOKEN=${SONAR_TOKEN} \
+                python:3.12-slim \
+                sh -c "pip install --no-cache-dir sonar-scanner && sonar-scanner \
+                -Dsonar.host.url=${SONAR_HOST_URL} \
+                -Dsonar.login=${SONAR_TOKEN} \
+                -Dsonar.projectKey=python-healthcheck-service \
+                -Dsonar.projectName='Python Healthcheck Service' \
+                -Dsonar.sources=/app/src \
+                -Dsonar.tests=/app/src/test \
+                -Dsonar.python.coverage.reportPaths=/app/src/coverage.xml \
+                -Dsonar.python.xunit.reportPath=/app/src/test-results.xml"
+            """
+    }
+  }
+}
+    stage('Quality Gate') {
+      steps {
+        timeout(time: 3, unit: 'MINUTES') {
+          waitForQualityGate abortPipeline: true
+        }
+      }
+    }
+    stage('Package') {
+      steps {
+        script {
+          def imageTag = "${env.BUILD_NUMBER}"
+          def imageNameWithTag = "${IMAGE_NAME}:${imageTag}"
+          def imageNameLatest = "${IMAGE_NAME}:latest"
+
+          dir("${CODE_DIR}/python-healthcheck-service") {
+            sh "docker build -t ${imageNameWithTag} -t ${imageNameLatest} ."
+          }
+          echo "Imagen construida: ${imageNameWithTag}"
+        }
+      }
+    }
+
+    stage('Publish to Registry') {
+      steps {
+        script {
+          def imageTag = "${env.BUILD_NUMBER}"
+          def registryImage = "${DOCKER_REGISTRY}/${IMAGE_NAME}:${imageTag}"
+          def registryImageLatest = "${DOCKER_REGISTRY}/${IMAGE_NAME}:latest"
+
+          sh "docker tag ${IMAGE_NAME}:${imageTag} ${registryImage}"
+          sh "docker tag ${IMAGE_NAME}:latest ${registryImageLatest}"
+          sh "docker push ${registryImage}"
+          sh "docker push ${registryImageLatest}"
+          echo "Imagen publicada en registry: ${registryImage}"
+        }
+      }
+    }
+  }
+
+  post {
+    always {
+      cleanWs()
+      echo 'Pipeline finalizado - Limpieza ejecutada'
+    }
+    success {
+      echo 'Pipeline completado exitosamente'
+    }
+    failure {
+      echo 'El pipeline ha fallado'
+    }
+    unstable {
+      echo 'Pipeline inestable - Verificar resultados'
+    }
+  }
+}

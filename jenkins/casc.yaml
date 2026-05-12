@@ -1,0 +1,8 @@
+  systemMessage: "Configurado automaticamente con JCasC - Reto 6 CI"
+unclassified:
+  # Configuracion del servidor SonarQube
+  sonarGlobalConfiguration:
+    installations:
+      - name: "SonarQube"
+        serverUrl: "http://sonarqube:9000"
+        credentialsId: "sonarqube-token"
