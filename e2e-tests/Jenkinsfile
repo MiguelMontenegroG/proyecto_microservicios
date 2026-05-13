@@ -18,16 +18,24 @@ pipeline {
         script {
           // Detener sistema previo si existe
           try {
-            sh 'docker-compose -f ${COMPOSE_FILE} -p ${COMPOSE_PROJECT_NAME} down --remove-orphans'
+            sh 'docker compose -f ${COMPOSE_FILE} -p ${COMPOSE_PROJECT_NAME} down --remove-orphans 2>/dev/null || true'
             echo 'Sistema previo detenido'
               } catch (Exception e) {
             echo 'No habia sistema previo que detener'
               }
-          // Desplegar sistema
-        sh 'docker-compose -f ${COMPOSE_FILE} -p ${COMPOSE_PROJECT_NAME} up -d --build'
-        echo 'Sistema desplegado, esperando inicializacion...'
-            }
+          // Desplegar solo los servicios de negocio (NO Jenkins, SonarQube, Registry)
+          sh '''
+            docker compose -f /code/docker-compose.yml -p microservicios up -d --no-build \
+              database-empleados database-departamentos database-perfiles \
+              database-notificaciones database-auth \
+              rabbitmq \
+              auth-service empleados-service departamentos-service \
+              perfiles-service notificaciones-service \
+              python-healthcheck-service
+          '''
+          echo 'Sistema desplegado, esperando inicializacion...'
           }
+    }
     }
 
     stage('Wait for Services') {
@@ -66,13 +74,12 @@ pipeline {
       }
             if (!allReady) {
               retryCount++
+              if (retryCount >= maxRetries) {
+                error "No todos los servicios estan disponibles despues de esperar ${maxRetries} intentos"
+    }
               echo "Intento ${retryCount}/${maxRetries} - Esperando 10s..."
               sleep(10)
     }
-    }
-
-          if (!allReady) {
-            error 'No todos los servicios estan disponibles despues de esperar'
     }
           echo "Todos los servicios estan listos!"
   }
@@ -84,9 +91,9 @@ pipeline {
         script {
           sh """
             docker run --rm \
-              --volumes-from jenkins \
-              -w ${E2E_DIR} \
-              --network proyecto_microservicios-network \
+              --network microservicios-network \
+              -v /code/e2e-tests:/app \
+              -w /app \
               maven:3.9.6-eclipse-temurin-21 \
               mvn test \
               -DbaseUrl="http://auth-service:${AUTH_SERVICE_PORT}" \
@@ -99,7 +106,8 @@ pipeline {
       }
       post {
         always {
-          junit "${E2E_DIR}/target/surefire-reports/*.xml"
+          junit allowEmptyResults: true,
+                testResults: '/code/e2e-tests/target/surefire-reports/*.xml'
         }
       }
     }
@@ -109,7 +117,7 @@ pipeline {
     always {
       script {
         try {
-          sh 'docker-compose -f ${COMPOSE_FILE} -p ${COMPOSE_PROJECT_NAME} down --remove-orphans'
+          sh 'docker compose -f ${COMPOSE_FILE} -p ${COMPOSE_PROJECT_NAME} down --remove-orphans 2>/dev/null || true'
           echo 'Sistema detenido y limpiado'
         } catch (Exception e) {
           echo 'Error al detener el sistema: ' + e.message

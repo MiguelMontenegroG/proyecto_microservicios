@@ -2,6 +2,7 @@ package com.microservicios.perfiles_service.config
 
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.http.HttpMethod
 import org.springframework.security.config.annotation.web.builders.HttpSecurity
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity
 import org.springframework.security.config.http.SessionCreationPolicy
@@ -27,6 +28,11 @@ class WebSecurityConfig {
                 auth
                     .requestMatchers('/swagger-ui/**', '/swagger-ui.html', '/v3/api-docs/**').permitAll()
                     .requestMatchers('/actuator/**').permitAll()
+                    // Solo ADMIN puede crear y modificar perfiles
+                    .requestMatchers(HttpMethod.POST, '/perfiles/**').hasAuthority('ADMIN')
+                    .requestMatchers(HttpMethod.PUT, '/perfiles/**').hasAuthority('ADMIN')
+                    // USER y ADMIN pueden consultar (GET)
+                    .requestMatchers(HttpMethod.GET, '/perfiles/**').authenticated()
                     .anyRequest().authenticated()
             }
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)

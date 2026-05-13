@@ -1,42 +1,38 @@
 FROM jenkins/jenkins:lts-jdk17
 
-# Pre-instalar plugins necesarios de forma automatizada
+# Instalar plugins necesarios de forma automatizada
 RUN jenkins-plugin-cli --plugins \
-  workflow-aggregator \
-  pipeline-stage-view \
-  git \
-  configuration-as-code \
-  job-dsl \
-  sonar \
-  pipeline-utility-steps \
-  jacoco \
-  blueocean \
-  docker-workflow \
-  docker-commons \
-  credentials-binding \
-  plain-credentials
+    docker-workflow \
+    pipeline-stage-view \
+    workflow-aggregator \
+    git \
+    configuration-as-code \
+    job-dsl \
+    sonar \
+    htmlpublisher \
+    junit \
+    matrix-auth \
+    credentials-binding \
+    pipeline-utility-steps \
+    timestamper \
+    build-timeout \
+    ws-cleanup
 
 # Instalar cliente Docker dentro del contenedor Jenkins
 USER root
 RUN apt-get update && \
-  apt-get install -y docker.io && \
-  rm -rf /var/lib/apt/lists/*
-
-# Crear script docker-compose que invoque el plugin compose de docker
-RUN printf '#!/bin/bash\ndocker compose "$@"\n' > /usr/local/bin/docker-compose && \
-    chmod +x /usr/local/bin/docker-compose
-
-# Verificar que docker-compose este disponible
-RUN docker-compose --version
+    apt-get install -y docker.io curl && \
+    rm -rf /var/lib/apt/lists/*
 
 # Agregar usuario jenkins al grupo docker para acceder al socket
 RUN groupadd -f docker && usermod -aG docker jenkins
 
-# Copiar entrypoint personalizado que hace setup como root y luego ejecuta Jenkins como jenkins
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+# Instalar docker-compose
+RUN curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-Linux-x86_64" -o /usr/local/bin/docker-compose && \
+    chmod +x /usr/local/bin/docker-compose
 
-# Asegurar que el entrypoint se ejecute como root
-USER root
-# Usar entrypoint personalizado
-ENTRYPOINT ["/entrypoint.sh"]
+# Copiar entrypoint personalizado que configura permisos del socket Docker
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

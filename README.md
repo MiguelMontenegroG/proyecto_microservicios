@@ -48,19 +48,19 @@ Este sistema implementa una arquitectura de microservicios que combina:
      ┌──────┴──────┐                           │
      │             │                           │
      ▼             ▼                           │
-┌─────────┐  ┌────────────┐                   │
-│ Perfiles│  │Notificaciones                  │
-│Service  │  │Service     │                   │
-│:8083    │  │:8084       │                   │
-└────┬────┘  └─────┬──────┘                   │
-     │             │                          │
-     ▼             ▼                          │
-┌─────────┐  ┌────────────┐                  │
-│ MongoDB │  │  MongoDB   │                  │
-│Perfiles │  │Notificaciones                 │
-└─────────┘  └────────────┘                  │
-                                              │
-            ┌─────────────────────────────────┘
+┌─────────┐  ┌────────────┐                    │
+│ Perfiles│  │Notificaciones                   │
+│Service  │  │Service     │                    │
+│:8083    │  │:8084       │                    │
+└────┬────┘  └─────┬──────┘                    │
+     │             │                           │
+     ▼             ▼                           │
+┌─────────┐  ┌────────────┐                    │
+│ MongoDB │  │  MongoDB   │                    │
+│Perfiles │  │Notificaciones                   │
+└─────────┘  └────────────┘                    │
+                                               │
+            ┌──────────────────────────────────┘
             │
             ▼
       ┌───────────┐
@@ -1183,3 +1183,151 @@ Cliente → Request con Token → Servicio Protegido
 ```
 
 ---
+## Reto 6 - Integracion Continua con Jenkins
+
+### Que es CI?
+
+La **Integracion Continua (CI)** es una practica de desarrollo de software en la que los desarrolladores integran su codigo en un repositorio compartido de forma frecuente, y cada integracion se verifica automaticamente mediante compilacion y pruebas. Esto permite detectar problemas en minutos, no en dias.
+
+| Aspecto | Sin CI | Con CI |
+|---------|--------|--------|
+| Compilacion | Manual, cuando alguien se acuerda | Automatica, en cada push |
+| Pruebas | Se ejecutan localmente (o no se ejecutan) | Se ejecutan automaticamente en cada cambio |
+| Deteccion de errores | Al intentar desplegar (tarde) | En minutos tras el commit (temprano) |
+| Confianza en el codigo | "En mi maquina funciona" | El pipeline lo verifica en un entorno limpio |
+| Empaquetado | Manual: docker build en la terminal | Automatico: imagen Docker generada por el pipeline |
+
+### Arquitectura CI del Sistema
+
+```
+Desarrollador -> git push -> Jenkins (CI) -> Build -> Test -> SonarQube -> Quality Gate -> Docker Build -> Registry
+                                                                       |
+                                                                       v
+                                                                E2E Tests (BDD)
+```
+
+### Acceso a los Servicios CI
+
+| Servicio | URL | Credenciales |
+|----------|-----|--------------|
+| **Jenkins** | http://localhost:9090 | admin / admin |
+| **SonarQube** | http://localhost:9000 | admin / admin (cambiar en primera vez) |
+| **Docker Registry** | http://localhost:5000 | Sin autenticacion |
+
+### Estructura de Archivos CI
+
+```
+proyecto/
+├── jenkins/
+│   ├── Dockerfile                    # Jenkins con plugins pre-instalados
+│   └── init.groovy.d/
+│       └── create-jobs.groovy        # Creacion automatica de pipelines al iniciar
+├── empleados-service/
+│   ├── Jenkinsfile                   # Pipeline CI para Java/Gradle
+│   └── sonar-project.properties
+├── python-healthcheck-service/
+│   ├── src/
+│   │   ├── app.py                    # Microservicio Flask
+│   │   ├── requirements.txt
+│   │   └── test/
+│   │       └── test_app.py           # Pruebas unitarias (7 tests)
+│   ├── Dockerfile
+│   ├── Jenkinsfile                   # Pipeline CI para Python
+│   └── sonar-project.properties
+├── e2e-tests/
+│   ├── Jenkinsfile                   # Pipeline E2E con Cucumber
+│   └── src/test/...                  # Pruebas BDD del Reto 5
+├── docker-compose.yml                # Incluye Jenkins, SonarQube, Registry
+└── README.md
+```
+
+### Como Levantar el Sistema con CI
+
+```bash
+# Desde la raiz del proyecto
+docker-compose up --build
+```
+
+**Nota:** La primera vez puede tardar varios minutos porque:
+1. Se descargan las imagenes de Jenkins, SonarQube, PostgreSQL
+2. Jenkins instala los plugins especificados en el Dockerfile
+3. SonarQube inicializa su base de datos
+
+### Pipelines Disponibles
+
+| Pipeline | Lenguaje | Etapas |
+|----------|----------|--------|
+| `empleados-service-ci` | Java/Groovy/Gradle | Checkout -> Build -> Test (JaCoCo) -> SonarQube -> Quality Gate -> Package -> Publish |
+| `python-healthcheck-service-ci` | Python/Flask | Checkout -> Install Deps -> Test (pytest-cov) -> SonarQube -> Quality Gate -> Package -> Publish |
+| `e2e-tests-ci` | Java/Maven/Cucumber | Checkout -> Deploy System -> Wait for Services -> E2E Tests -> Cleanup |
+| `hello-world` | Pipeline prueba | Verificacion de Jenkins y Docker |
+
+### Descripcion de Etapas del Pipeline
+
+| Etapa | Descripcion | Que verifica |
+|-------|-------------|--------------|
+| **Checkout** | Obtiene el codigo fuente del repositorio | Que el repositorio sea accesible |
+| **Build** | Compila el proyecto (sin pruebas) | Que el codigo compile sin errores |
+| **Test** | Ejecuta pruebas unitarias y genera reporte de cobertura | Que todas las pruebas pasen y se genere cobertura |
+| **SonarQube Analysis** | Envia el codigo y reportes a SonarQube | Analisis estatico: bugs, vulnerabilidades, code smells |
+| **Quality Gate** | Espera el resultado del Quality Gate de SonarQube | Que la calidad del codigo cumpla los umbrales (cobertura >= 70%) |
+| **Package** | Construye la imagen Docker del servicio | Que el Dockerfile construya correctamente |
+| **Publish** | Publica la imagen en el Docker Registry local | Que la imagen se pueda almacenar y distribuir |
+| **E2E Tests** | Levanta el sistema completo y ejecuta pruebas BDD | Que el sistema funcione integralmente |
+
+### Interpretacion de Resultados
+
+- **Verde (exito)**: Todas las etapas pasaron correctamente
+- **Rojo (fallo)**: El pipeline se detuvo en una etapa. Revisar logs para identificar la causa
+- **Amarillo (inestable)**: Algunas pruebas fallaron pero el pipeline continuo
+
+### Simulacion de Fallos
+
+Para probar que el pipeline detecta errores correctamente:
+
+1. **Fallo en Test**: Modificar un test para que falle intencionalmente
+2. **Fallo en Quality Gate**: Reducir la cobertura por debajo del 70% eliminando pruebas
+3. **Fallo en Package**: Introducir un error en el Dockerfile
+4. **Fallo en E2E**: Modificar un escenario BDD para que falle
+
+### Configuracion de SonarQube
+
+1. Acceder a http://localhost:9000
+2. Login con admin/admin (cambiar contrasena)
+3. Ir a "Administration -> Webhooks" y crear webhook:
+   - Name: `jenkins-webhook`
+   - URL: `http://jenkins:8080/sonarqube-webhook/`
+4. Ir a "Quality Gates" y crear uno personalizado:
+   - Name: `Microservicios Quality Gate`
+   - Condiciones:
+     - Coverage on New Code >= 70%
+     - Bugs = 0
+     - Vulnerabilities = 0
+5. Generar token en "User -> My Account -> Security"
+
+### Notas Tecnicas
+
+- **Jenkins** usa Docker Socket Mount para construir imagenes Docker dentro del contenedor
+- **SonarQube** usa PostgreSQL como base de datos separada
+- **Docker Registry** es local (sin autenticacion para entorno academico)
+- **init.groovy.d** crea los pipelines automaticamente al iniciar Jenkins, leyendo los Jenkinsfiles del codigo fuente montado como volumen (`/code/`)
+- Los pipelines usan agentes Docker efimeros definidos con `agent { docker { ... } }` para no instalar herramientas en el contenedor Jenkins
+- El cache de dependencias (Gradle, Pip) se mantiene con volumenes montados para evitar descargar todo cada vez
+- La etapa `Publish to Registry` envia las imagenes al Docker Registry local en `localhost:5000`
+
+### Puertos del Sistema Completo
+
+| Puerto | Servicio |
+|--------|----------|
+| 8080 | empleados-service |
+| 8081 | departamentos-service |
+| 8083 | perfiles-service |
+| 8084 | notificaciones-service |
+| 8085 | auth-service |
+| 8086 | python-healthcheck-service |
+| 9000 | SonarQube |
+| 9090 | Jenkins |
+| 5000 | Docker Registry |
+| 5672 | RabbitMQ |
+| 15672 | RabbitMQ Management |
+| 27017-27021 | Bases de datos MongoDB |

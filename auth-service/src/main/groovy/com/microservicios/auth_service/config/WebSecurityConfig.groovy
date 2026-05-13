@@ -29,7 +29,10 @@ class WebSecurityConfig {
             .sessionManagement { it.sessionCreationPolicy(SessionCreationPolicy.STATELESS) }
             .authorizeHttpRequests { auth ->
                 auth
-                    .requestMatchers('/auth/**').permitAll()  // Login y validación públicos
+                    .requestMatchers('/auth/login').permitAll()
+                    .requestMatchers('/auth/forgot-password').permitAll()
+                    .requestMatchers('/auth/recover-password').permitAll()
+                    .requestMatchers('/auth/reset-password').permitAll()
                     .requestMatchers('/v3/api-docs/**', '/swagger-ui/**', '/swagger-ui.html').permitAll()
                     .requestMatchers('/actuator/**').permitAll()
                     .anyRequest().authenticated()
