@@ -11,13 +11,14 @@ import io.cucumber.java.Scenario;
 public class Hooks {
     @Before
     public void setUp(Scenario scenario) {
+        // Resetear contexto para cada escenario (independencia total)
+        TestContext.resetInstance();
         TestContext context = TestContext.getInstance();
-        String baseUrl = System.getProperty("baseUrl",
-            System.getenv().getOrDefault("BASE_URL", "http://localhost:8085"));
-        context.setBaseUrl(baseUrl);
-        context.clear();
         System.out.println("=== Iniciando escenario: " + scenario.getName() + " ===");
-        System.out.println("BASE_URL configurada: " + baseUrl);
+        System.out.println("AUTH_URL: " + context.getAuthUrl());
+        System.out.println("EMPLEADOS_URL: " + context.getEmpleadosUrl());
+        System.out.println("DEPARTAMENTOS_URL: " + context.getDepartamentosUrl());
+        System.out.println("NOTIFICACIONES_URL: " + context.getNotificacionesUrl());
     }
 
     @After
