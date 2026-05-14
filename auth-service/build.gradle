@@ -48,6 +48,12 @@ dependencies {
 	runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.11.5'
 	runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.11.5'
 
+	// Métricas Prometheus (Reto 7 - Observabilidad)
+	implementation 'io.micrometer:micrometer-registry-prometheus'
+
+	// Logs estructurados JSON (Reto 7 - Loki)
+	implementation 'net.logstash.logback:logstash-logback-encoder:7.4'
+
 	// Lombok (opcional pero recomendado)
 	compileOnly 'org.projectlombok:lombok:1.18.30'
 	annotationProcessor 'org.projectlombok:lombok:1.18.30'

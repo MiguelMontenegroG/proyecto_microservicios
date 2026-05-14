@@ -1327,6 +1327,10 @@ Para probar que el pipeline detecta errores correctamente:
 | 8086 | python-healthcheck-service |
 | 9000 | SonarQube |
 | 9090 | Jenkins |
+| 9091 | Prometheus |
+| 3000 | Grafana |
+| 9411 | Zipkin |
+| 3100 | Loki |
 | 5000 | Docker Registry |
 | 5672 | RabbitMQ |
 | 15672 | RabbitMQ Management |

@@ -18,14 +18,14 @@
     Given que estoy autenticado como "ADMIN"
     And que existe un departamento "IT" con nombre "Tecnologia"
     When registro un nuevo empleado con datos:
-      | id   | nombre  | apellido | email              | departamentoId |
-      | SEC1 | Juan    | Perez    | juan.perez@empresa.com | IT            |
+      | id   | nombre  | apellido | email                       | departamentoId |
+      | SEC1 | Juan    | Perez    | juan.perez@empresa.com       | IT            |
     Then la respuesta debe tener codigo 201
 
   Scenario: Usuario USER no puede crear empleados
     Given que estoy autenticado como "USER"
     And que existe un departamento "IT" con nombre "Tecnologia"
     When registro un nuevo empleado con datos:
-      | id   | nombre  | apellido | email              | departamentoId |
-      | SEC2 | Ana     | Garcia   | ana.garcia@empresa.com | IT            |
-    Then la respuesta debe tener codigo 201
+      | id   | nombre  | apellido | email                       | departamentoId |
+      | SEC2 | Ana     | Garcia   | ana.garcia@empresa.com       | IT            |
+    Then la respuesta debe tener codigo 403
